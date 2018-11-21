@@ -11,7 +11,7 @@ use native_tls::Error as TlsError;
 use serde_json::Error as JsonError;
 #[cfg(feature = "yaml")]
 use serde_yaml::Error as YamlError;
-use tokio_timer::TimerError;
+use tokio_timer::Error as TimerError;
 #[cfg(feature = "toml")]
 use toml::de::Error as TomlReadError;
 #[cfg(feature = "toml")]

@@ -9,7 +9,7 @@ use chrono::prelude::*;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer;
-use tokio_timer::{Interval, Sleep, Timer};
+use tokio_timer::{Interval, Delay, Timer};
 
 use error;
 use client::data::Config;
@@ -21,8 +21,7 @@ where
     T: AsyncRead + AsyncWrite,
 {
     inner: Framed<T, IrcCodec>,
-    burst_timer: Timer,
-    rolling_burst_window: VecDeque<Sleep>,
+    rolling_burst_window: VecDeque<Delay>,
     burst_window_length: u64,
     max_burst_messages: u64,
     current_burst_messages: u64,
@@ -39,15 +38,13 @@ where
 {
     /// Creates a new `IrcTransport` from the given IRC stream.
     pub fn new(config: &Config, inner: Framed<T, IrcCodec>) -> IrcTransport<T> {
-        let timer = tokio_timer::wheel().build();
         IrcTransport {
             inner: inner,
-            burst_timer: tokio_timer::wheel().build(),
             rolling_burst_window: VecDeque::new(),
             burst_window_length: u64::from(config.burst_window_length()),
             max_burst_messages: u64::from(config.max_messages_in_burst()),
             current_burst_messages: 0,
-            ping_timer: timer.interval(Duration::from_secs(u64::from(config.ping_time()))),
+            ping_timer: tokio_timer::Interval::new_interval(Duration::from_secs(u64::from(config.ping_time()))),
             ping_timeout: u64::from(config.ping_timeout()),
             last_ping_data: String::new(),
             last_ping_sent: Instant::now(),
@@ -80,7 +77,7 @@ where
         Ok(())
     }
 
-    fn rolling_burst_window_front(&mut self) -> Result<Async<()>, tokio_timer::TimerError> {
+    fn rolling_burst_window_front(&mut self) -> Result<Async<()>, tokio_timer::Error> {
         self.rolling_burst_window.front_mut().map(|w| w.poll()).unwrap_or(Ok(Async::NotReady))
     }
 }
@@ -167,7 +164,7 @@ where
                 AsyncSink::NotReady(item) => Ok(AsyncSink::NotReady(item)),
                 AsyncSink::Ready => {
                     self.current_burst_messages += 1;
-                    self.rolling_burst_window.push_back(self.burst_timer.sleep(Duration::from_secs(
+                    self.rolling_burst_window.push_back(tokio_timer::sleep(Duration::from_secs(
                         self.burst_window_length
                     )));
                     Ok(AsyncSink::Ready)
